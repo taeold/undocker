@@ -469,19 +469,6 @@
         font-size: 13px;
         color: var(--dim);
       }
-
-      footer {
-        margin-top: 40px;
-        padding-top: 16px;
-        border-top: 1px solid var(--line);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 10px;
-        font-size: 12px;
-        color: var(--faint);
-      }
     </style>
   </head>
   <body>
@@ -572,12 +559,8 @@
       <p class="summary">
         Pulls <code>linux/arm64</code> layers straight from Docker Hub or GHCR and mounts them into
         Linux from the browser. Containers run locally in your tab, with nothing executing on a
-        server.
+        server. <a href="https://github.com/taeold/undocker" target="_blank" rel="noreferrer">source</a>
       </p>
-
-      <footer>
-        <span id="footer-stats">0 images · 0 ports</span>
-      </footer>
     </main>
 
     <script type="module" src="/src/main.js"></script>

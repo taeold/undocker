@@ -20,7 +20,6 @@ const btnPreviewClose = document.getElementById("btn-preview-close");
 const btnClear = document.getElementById("btn-clear");
 const btnReset = document.getElementById("btn-reset");
 const btnTheme = document.getElementById("btn-theme");
-const footerStats = document.getElementById("footer-stats");
 
 // ---------------- Theme Toggle ----------------
 function syncThemeLabel() {
@@ -56,12 +55,6 @@ function setIdleHtml(html) {
   idleScreen.innerHTML = html;
 }
 
-function updateFooter() {
-  const imgs = runtime ? runtime.imageCount() : 0;
-  const ports = openPorts.size;
-  footerStats.textContent = `${imgs} image${imgs === 1 ? "" : "s"} · ${ports} published port${ports === 1 ? "" : "s"}`;
-}
-
 function renderPortPills() {
   portPillsEl.innerHTML = "";
   for (const info of openPorts.values()) {
@@ -73,7 +66,6 @@ function renderPortPills() {
     btn.addEventListener("click", () => openPreview(info.hostPort));
     portPillsEl.appendChild(btn);
   }
-  updateFooter();
 }
 
 function buildSrcdoc(res, reqPath) {
@@ -345,9 +337,6 @@ async function ensureBooted(initialCmd = "") {
           renderPortPills();
           if (closedPort != null && activePreviewPort === closedPort) closePreview();
         },
-        onImageChange() {
-          updateFooter();
-        },
         onDisplay(mode) {
           showFramebuffer(mode);
         },
@@ -358,7 +347,6 @@ async function ensureBooted(initialCmd = "") {
 
       const totalMs = Math.round(performance.now() - t0);
       setStatus("ready", `linux ${runtime.kernelVer} · aarch64 · ${totalMs}ms`);
-      updateFooter();
 
       if (pendingInput) {
         runtime.send(pendingInput);
@@ -422,7 +410,6 @@ btnReset.addEventListener("click", async () => {
   xtermMount.innerHTML = "";
   idleScreen.style.display = "";
   setIdleHtml("");
-  updateFooter();
   ensureBooted();
 });
 
