@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <title>undocker — Docker in a browser tab</title>
+    <meta
+      name="description"
+      content="Run unmodified linux/arm64 Docker containers directly in your browser tab on a real Linux 7.x kernel in WebAssembly."
+    />
+    <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='1' width='6' height='6' fill='none' stroke='%23ededed' stroke-width='1.5'/%3E%3Crect x='9' y='1' width='6' height='6' fill='none' stroke='%23ededed' stroke-width='1.5'/%3E%3Crect x='1' y='9' width='6' height='6' fill='none' stroke='%23ededed' stroke-width='1.5'/%3E%3Crect x='9' y='9' width='6' height='6' fill='%23ededed'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600;700&display=swap"
+    />
+    <script>
+      (function () {
+        var t = localStorage.getItem("undocker-theme");
+        if (!t) t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+        document.documentElement.dataset.theme = t;
+        document.documentElement.style.colorScheme = t;
+      })();
+    </script>
+    <style>
+      :root,
+      [data-theme="dark"] {
+        --bg: #0a0a0a;
+        --surface: #0e0e0e;
+        --fg: #ededed;
+        --dim: #a1a1a1;
+        --faint: #666666;
+        --line: #242424;
+        --line-strong: #3a3a3a;
+        --term-bg: #0c0c0c;
+        --term-fg: #e5e5e5;
+        --ok: #4ade80;
+        --warn: #facc15;
+        --bad: #f87171;
+        --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+
+      [data-theme="light"] {
+        --bg: #ffffff;
+        --surface: #fafafa;
+        --fg: #0a0a0a;
+        --dim: #555555;
+        --faint: #888888;
+        --line: #e5e5e5;
+        --line-strong: #cccccc;
+        --term-bg: #0c0c0c;
+        --term-fg: #e5e5e5;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font: 13.5px/1.65 var(--mono);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: underline;
+        text-decoration-color: var(--line-strong);
+        text-underline-offset: 3px;
+      }
+
+      a:hover {
+        text-decoration-color: var(--fg);
+      }
+
+      code {
+        font: 12.5px var(--mono);
+        color: var(--fg);
+      }
+
+      /* Top nav */
+      header {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 20px 24px 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        transition: max-width 180ms ease;
+      }
+
+      body.has-preview header,
+      body.has-preview main {
+        max-width: 1120px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        font-size: 14px;
+        letter-spacing: -0.02em;
+        text-decoration: none;
+        color: var(--fg);
+      }
+
+      .brand svg {
+        width: 15px;
+        height: 15px;
+        display: block;
+      }
+
+      nav {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        font-size: 12.5px;
+        color: var(--dim);
+      }
+
+      nav a,
+      nav button {
+        background: none;
+        border: 0;
+        padding: 0;
+        font: inherit;
+        color: inherit;
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      nav a:hover,
+      nav button:hover {
+        color: var(--fg);
+      }
+
+      /* Main layout */
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 44px 24px 72px;
+        transition: max-width 180ms ease;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        line-height: 1.35;
+      }
+
+      .lead {
+        margin: 0;
+        color: var(--dim);
+      }
+
+      /* Workspace */
+      .workspace {
+        margin: 24px 0 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 16px;
+      }
+
+      body.has-preview .workspace {
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.85fr);
+      }
+
+      @media (max-width: 860px) {
+        body.has-preview .workspace {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+
+      .frame {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--term-bg);
+        color: var(--term-fg);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .bar {
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 0 14px;
+        border-bottom: 1px solid #1d1d1d;
+        font-size: 12px;
+        color: #777;
+        user-select: none;
+      }
+
+      .bar-left,
+      .bar-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #444;
+        flex-shrink: 0;
+      }
+
+      .dot[data-state="loading"] {
+        background: var(--warn);
+      }
+
+      .dot[data-state="ready"] {
+        background: var(--ok);
+      }
+
+      .dot[data-state="error"] {
+        background: var(--bad);
+      }
+
+      .bar-status {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: #999;
+      }
+
+      .bar-btn {
+        background: none;
+        border: 0;
+        padding: 2px 5px;
+        font: inherit;
+        font-size: 11.5px;
+        color: #777;
+        cursor: pointer;
+        text-decoration: none;
+        border-radius: 4px;
+      }
+
+      .bar-btn:hover {
+        color: #ededed;
+      }
+
+      .ports {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .port-pill {
+        background: #171717;
+        border: 1px solid #2e2e2e;
+        color: #ededed;
+        border-radius: 4px;
+        padding: 1px 7px;
+        font: inherit;
+        font-size: 11px;
+        cursor: pointer;
+      }
+
+      .port-pill:hover {
+        border-color: #666;
+      }
+
+      /* Terminal area */
+      .screen-wrap {
+        position: relative;
+        height: 360px;
+        background: var(--term-bg);
+      }
+
+      @media (max-width: 600px) {
+        header {
+          padding: 16px 16px 0;
+        }
+        main {
+          padding: 28px 16px 56px;
+        }
+        .screen-wrap {
+          height: 320px;
+        }
+      }
+
+      /* Instant lightweight idle/boot screen (pixel-matched to xterm.js) */
+      #idle-screen {
+        position: absolute;
+        inset: 0;
+        padding: 12px 14px;
+        overflow: hidden;
+        font: 13px/1.4 var(--mono);
+        color: #e5e5e5;
+        white-space: pre-wrap;
+        word-break: break-word;
+        cursor: text;
+        z-index: 2;
+        background: var(--term-bg);
+      }
+
+      #idle-screen .dim {
+        color: #525252;
+      }
+
+      #idle-screen .hi {
+        color: #ffffff;
+        font-weight: 700;
+      }
+
+      #idle-screen .err {
+        color: var(--bad);
+      }
+
+      #xterm-mount {
+        position: absolute;
+        inset: 0;
+        padding: 12px 14px;
+        opacity: 0;
+        pointer-events: none;
+        z-index: 1;
+      }
+
+      #xterm-mount.active {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      #xterm-mount .xterm {
+        height: 100%;
+      }
+
+      #xterm-mount .xterm-viewport {
+        scrollbar-width: thin;
+        scrollbar-color: #2b2b2b transparent;
+      }
+
+      /* Inline terminal action bar (npmrunbuild style) */
+      .actions {
+        padding: 10px 14px 12px;
+        border-top: 1px solid #1a1a1a;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 18px;
+        font-size: 12.5px;
+      }
+
+      .actions button {
+        background: none;
+        border: 0;
+        padding: 0;
+        font: inherit;
+        color: #d4d4d4;
+        cursor: pointer;
+        text-decoration: underline;
+        text-decoration-color: #3a3a3a;
+        text-underline-offset: 3px;
+      }
+
+      .actions button::before {
+        content: attr(data-mark) " ";
+        color: #666;
+        text-decoration: none;
+        display: inline-block;
+      }
+
+      .actions button:hover {
+        color: #ffffff;
+        text-decoration-color: #ffffff;
+      }
+
+      .actions button:hover::before {
+        color: #ffffff;
+      }
+
+      /* Live preview & framebuffer display panel */
+      #preview-frame-box {
+        display: none;
+      }
+
+      body.has-preview #preview-frame-box {
+        display: flex;
+      }
+
+      #preview-iframe {
+        width: 100%;
+        flex: 1;
+        min-height: 360px;
+        border: 0;
+        background: #ffffff;
+      }
+
+      #fb-wrap {
+        display: none;
+        flex: 1;
+        flex-direction: column;
+        background: #000;
+      }
+
+      #fb-wrap.active {
+        display: flex;
+      }
+
+      #fb-canvas {
+        width: 100%;
+        aspect-ratio: 320 / 200;
+        image-rendering: pixelated;
+        background: #000;
+        outline: none;
+        display: block;
+      }
+
+      .fb-controls {
+        padding: 10px 12px;
+        border-top: 1px solid #1d1d1d;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+        background: #0c0c0c;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      .fb-group {
+        display: flex;
+        gap: 6px;
+      }
+
+      .fb-key {
+        background: #171717;
+        border: 1px solid #2e2e2e;
+        color: #e5e5e5;
+        border-radius: 4px;
+        padding: 5px 9px;
+        font: 11.5px var(--mono);
+        cursor: pointer;
+        touch-action: none;
+      }
+
+      .fb-key:active {
+        background: #2c2c2c;
+        border-color: #666;
+      }
+
+      .fb-hint {
+        width: 100%;
+        font-size: 11px;
+        color: #666;
+      }
+
+      /* Single-paragraph technical note */
+      .summary {
+        margin: 28px 0 0;
+        font-size: 13px;
+        color: var(--dim);
+      }
+
+      footer {
+        margin-top: 40px;
+        padding-top: 16px;
+        border-top: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+        font-size: 12px;
+        color: var(--faint);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="#">
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <rect x="1.5" y="1.5" width="5.5" height="5.5" stroke="currentColor" stroke-width="1.35" />
+          <rect x="9" y="1.5" width="5.5" height="5.5" stroke="currentColor" stroke-width="1.35" />
+          <rect x="1.5" y="9" width="5.5" height="5.5" stroke="currentColor" stroke-width="1.35" />
+          <rect x="9" y="9" width="5.5" height="5.5" fill="currentColor" />
+        </svg>
+        <span>undocker</span>
+      </a>
+      <nav>
+        <button id="btn-reset" type="button">reset</button>
+        <button id="btn-theme" type="button">theme</button>
+      </nav>
+    </header>
+
+    <main>
+      <h1>Docker, in a browser tab.</h1>
+      <p class="lead">
+        Pulls unmodified <code>linux/arm64</code> OCI images and runs them in your browser.<br />
+        Powered by <a href="https://github.com/pithings/unkernel" target="_blank" rel="noreferrer">unkernel</a>.
+      </p>
+
+      <section class="workspace">
+        <div class="frame">
+          <div class="bar">
+            <div class="bar-left">
+              <span class="dot" id="status-dot" data-state="loading"></span>
+              <span class="bar-status" id="status-text">starting linux 7.x wasm…</span>
+            </div>
+            <div class="bar-right">
+              <div class="ports" id="port-pills"></div>
+              <button id="btn-clear" class="bar-btn" type="button">clear</button>
+            </div>
+          </div>
+
+          <div class="screen-wrap">
+            <div id="idle-screen" tabindex="0" role="region" aria-label="Terminal"></div>
+            <div id="xterm-mount"></div>
+          </div>
+
+          <div class="actions" id="actions">
+            <button type="button" data-mark="▸" data-cmd="docker run hello-world">hello-world</button>
+            <button type="button" data-mark="▸" data-cmd="docker run -it alpine sh">alpine sh</button>
+            <button type="button" data-mark="▸" data-cmd="docker run -it python:3.13-alpine python3">python3</button>
+            <button type="button" data-mark="▸" data-cmd="docker run -d -p 8080:80 nginx:alpine-slim">nginx</button>
+            <button type="button" data-mark="▸" data-cmd="docker run doom">doom</button>
+          </div>
+        </div>
+
+        <aside class="frame" id="preview-frame-box">
+          <div class="bar">
+            <div class="bar-left">
+              <span class="dot" data-state="ready"></span>
+              <span class="bar-status" id="preview-url">http://localhost:8080</span>
+            </div>
+            <div class="bar-right">
+              <button id="btn-preview-reload" class="bar-btn" type="button">reload</button>
+              <a id="btn-preview-open" class="bar-btn" href="#" target="_blank" rel="noreferrer">open ↗</a>
+              <button id="btn-preview-close" class="bar-btn" type="button">close</button>
+            </div>
+          </div>
+          <iframe id="preview-iframe" title="Container HTTP preview"></iframe>
+          <div id="fb-wrap">
+            <canvas id="fb-canvas" width="320" height="200" tabindex="0"></canvas>
+            <div class="fb-controls">
+              <div class="fb-group">
+                <button class="fb-key" data-key="ArrowLeft" type="button">◀</button>
+                <button class="fb-key" data-key="ArrowUp" type="button">▲</button>
+                <button class="fb-key" data-key="ArrowDown" type="button">▼</button>
+                <button class="fb-key" data-key="ArrowRight" type="button">▶</button>
+              </div>
+              <div class="fb-group">
+                <button class="fb-key" data-key="ControlLeft" type="button">fire</button>
+                <button class="fb-key" data-key="Space" type="button">use</button>
+                <button class="fb-key" data-key="Enter" type="button">enter</button>
+                <button class="fb-key" data-key="Escape" type="button">esc</button>
+              </div>
+              <div class="fb-hint">click screen to focus · arrows/wasd move · ctrl/f fire · space/e use · enter/esc menu</div>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <p class="summary">
+        Pulls <code>linux/arm64</code> layers straight from Docker Hub or GHCR and mounts them into
+        Linux from the browser. Containers run locally in your tab, with nothing executing on a
+        server.
+      </p>
+
+      <footer>
+        <span id="footer-stats">0 images · 0 ports</span>
+      </footer>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

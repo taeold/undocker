@@ -1,0 +1,8 @@
+node_modules/
+dist/
+public/oci/
+fbdoom/oci-dist/
+.oci-cache/
+undocker-demo.mp4
+.DS_Store
+*.log
